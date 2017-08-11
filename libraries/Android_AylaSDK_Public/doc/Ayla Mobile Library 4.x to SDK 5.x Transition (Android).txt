@@ -1,0 +1,1561 @@
+Ayla Mobile Library 4.x to SDK 5.x Transition (Android)
+
+Overview
+This document only illustrates the transition from the older Ayla Mobile Library 4.x to the newer Ayla SDK 5.x.  For a complete description of Ayla SDK 5.x, it is recommended that the Ayla Mobile Getting Started Guide and Ayla Mobile SDK Developer’s Guide v5.0 are read first (these documents are in the docs directory of the AylaSDK release).
+
+This document is directed towards mobile application developers who are transitioning an Ayla-connected application to AylaSDK 5.x from AML 4.x.
+
+This transition guide goes over the following areas, showing the old method and the new method.
+
+ * Logging
+ * Initialization
+ * Connectivity
+ * Login
+ * Device/Wi-Fi Setup
+ * Registration
+ * Session Manager
+ * Devices
+ * Lan Mode
+ * Contacts/Account
+ * Schedules
+ * Account Sharing
+
+If issues or differences are encountered, it is best to reference the latest SDK unit tests or the separate distribution of Aura, the test application.
+
+*** Logging:
+Logging should be initialized before initializing the Ayla system. This section illustrates the differences between 4.x and 5.x.
+
+4.x
+        AylaSystemUtils.loggingLevel = AylaNetworks.AML_LOGGING_LEVEL_ALL;
+        AylaSystemUtils.loggingEnabled = AylaNetworks.YES;
+        AylaSystemUtils.loggingInit();
+
+5.x
+        AylaLog.initAylaLog(“appName_logs", getConsoleLogLevel(), getFileLoglevel());
+
+    public AylaLog.LogLevel getConsoleLogLevel() {
+        return BuildConfig.DEBUG ? AylaLog.LogLevel.Debug : AylaLog.LogLevel.Info;
+    }
+
+    public AylaLog.LogLevel getFileLoglevel() {
+        return BuildConfig.DEBUG ? AylaLog.LogLevel.Debug : AylaLog.LogLevel.Info;
+    }
+
+*** Initialization:
+The AylaNetworks class is used to configure the SDK with your application-specific information.  The AylaNetworks class must be initialized before any other SDK operations are performed.
+
+4.x
+	AylaNetworks.init(context, regEx, appId);
+
+5.x
+	AylaNetworks.initialize(getSystemSettings(context));
+
+    private AylaSystemSettings getSystemSettings(Context context) {
+        AylaSystemSettings settings = new AylaSystemSettings();
+        settings.deviceDetailProvider = new MyDeviceDetailProvider();
+        settings.appId = appId;
+        settings.appSecret = appSecret;
+        settings.context = context;
+        settings.serviceLocation = AylaSystemSettings.ServiceLocation.USA;
+        settings.serviceType = AylaSystemSettings.ServiceType.Field;
+        settings.allowDSS = false;
+        settings.defaultNetworkTimeoutMs = (TIMEOUT_SECONDS_SERVICE * 1000);
+        return settings;
+    }
+
+    class MyDeviceDetailProvider implements AylaSystemSettings.DeviceDetailProvider {
+        @Override
+        public String[] getManagedPropertyNames(AylaDevice aylaDevice) {
+	    // return an array of the managed property names.
+            return managedPropertyNames;
+        }
+    }
+
+See the Configuring System Settings and Device Detail Provider sections of the Ayla Mobile Getting Started Guide for more information.
+
+*** Connectivity:
+Upon initialization, AylaNetworks provides an AylaConnectivity object that may be used to receive notifications of network connectivity changes.
+
+4.x
+AylaConnectivityListener
+AylaReachability - AylaReachability is responsible for detecting reachability to the service and/or the device in the same lan.
+
+	AylaLanMode.enable(notifierHandler, reachabilityHandler);
+
+5.x
+AylaConnectivity - AylaConnectivity monitors the network state and provides listeners with notifications when the state changes.
+
+	AylaNetworks.sharedInstance().getConnectivity().registerListener(listener);
+	AylaNetworks.sharedInstance().getConnectivity().unregisterListener(listener);
+
+***
+The rest of this guide will show methods that have been converted from using a Handler to using a Listener.
+
+4.x
+There are several big changes in AylaSDK 5.x. One such is the change from using Handler to using the Listener model.  A lot of the transition will be switching from the Handler model to the Listener model. 
+
+Generally, with the Ayla Library 4.x (and previous) a Handler was passed to methods.
+
+	AylaUser.signUp(new Handler() {
+	    @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, params, appId, appSecret);
+
+5.x
+Now a mechanism called Listener is used.
+
+        AylaNetworks.sharedInstance().getLoginManager().signUp(newUser, template,
+                new Response.Listener<AylaUser>() {
+                    @Override
+                    public void onResponse(AylaUser user) {
+			// success
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+Both the Listener and ErrorListener parameters may be anonymous inner classes defined to handle the onResponse / onErrorResponse methods, much like the blocks in the Objective-C APIs.On success, the successListener’s onResponse method is called with an AylaAuthorization object created as a result of the successful sign operation.
+If an error occurred, the errorListener’s onErrorResponse method is called with an AylaError object containing details about the failure.
+
+*** Login:
+Login contains methods to sign-in the user, sign up a new user, have the service re-send a confirmation email to the user, or have the service send an email to the user with a link to reset their password.
+
+Account Creation (signUp)
+
+Creates a new user account. A valid email address, password and user first name are all required. Upon a successful sign-up, an email is sent to the user with a link to confirm the account.
+
+4.x
+	AylaUser newUser;
+	Map<String, String> params = new HashMap<String, String>();
+	params.put("email", newUser.email);
+	params.put("password", newUser.password);
+	params.put("firstname", newUser.firstname);
+	params.put("lastname", newUser.lastname);
+	params.put("country", "US");
+	if (!TextUtils.isEmpty(registrationEmailBodyHTML)) {
+            params.put(AylaNetworks.AML_EMAIL_BODY_HTML, registrationEmailBodyHTML);
+        } else {
+            params.put(AylaNetworks.AML_EMAIL_TEMPLATE_ID, registrationEmailTemplateId);
+        }
+        params.put(AylaNetworks.AML_EMAIL_SUBJECT, registrationEmailSubject);
+	AylaUser.signUp(handler, params, appId, appSecret);
+
+5.x
+        AylaEmailTemplate template = new AylaEmailTemplate();
+        template.setEmailTemplateId(registrationEmailTemplateId);
+        template.setEmailSubject(registrationEmailSubject);
+        AylaNetworks.sharedInstance().getLoginManager().signUp(newUser, template,
+                new Response.Listener<AylaUser>() {
+                    @Override
+                    public void onResponse(AylaUser user) {
+			// success
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+Resend Account Confirmation (resendConfirmationForEmail)
+
+Re-sends the email that was sent when the user first signed up. Useful if the email was not received or was lost.
+
+4.x
+        Map<String, String> params = new HashMap<>();
+        if (!TextUtils.isEmpty(registrationEmailBodyHTML)) {
+            params.put(AylaNetworks.AML_EMAIL_BODY_HTML, registrationEmailBodyHTML);
+        } else {
+            params.put(AylaNetworks.AML_EMAIL_TEMPLATE_ID, registrationEmailTemplateId);
+        }
+        params.put(AylaNetworks.AML_EMAIL_SUBJECT, registrationEmailSubject);
+        AylaUser.resendConfirmation(handler, email, appId, appSecret, params);
+
+5.x
+        AylaEmailTemplate template = new AylaEmailTemplate();
+        template.setEmailTemplateId(registrationEmailTemplateId);
+        template.setEmailSubject(registrationEmailSubject);
+        AylaNetworks.sharedInstance().getLoginManager().resendConfirmationEmail(email, template, listener);
+
+Account Confirmation (validateSignUpToken)
+
+Requires a token provided by the sign-in email sent when the user signed up. Mobile applications may be configured to provide the token as part of a custom URL that can be used to launch the mobile application. After the token is provided to confirmSignUp and the service accepts it, the user account is verified and the user may sign in.
+
+4.x
+        Map<String, String> params = new HashMap<String, String>();
+        params.put("confirmation_token", token);
+        AylaUser.signUpConfirmation(handler, params);
+
+5.x
+	AylaNetworks.sharedInstance().getLoginManager().confirmSignUp(token, listener);
+
+Request Reset Password (resetPasswordForEmail)
+
+Sends an email to the user with a link to reset their password. Like the confirmation email, this link may be configured to launch the mobile application instead of validating through a website.
+
+4.x
+        Map<String, String> params = new HashMap<>();
+        if (!TextUtils.isEmpty(resetPasswordEmailBodyHTML)) {
+            params.put(AylaNetworks.AML_EMAIL_BODY_HTML, resetPasswordEmailBodyHTML);
+        } else {
+            params.put(AylaNetworks.AML_EMAIL_TEMPLATE_ID, resetPasswordEmailTemplateId);
+        }
+        params.put(AylaNetworks.AML_EMAIL_SUBJECT, resetPasswordEmailSubject);
+        AylaUser.resetPassword(handler, email, appId, appSecret, params);
+
+5.x
+        AylaEmailTemplate template = new AylaEmailTemplate();
+        template.setEmailTemplateId(resetPasswordEmailTemplateId);
+        template.setEmailSubject(resetPasswordEmailSubject);
+        AylaNetworks.sharedInstance().getLoginManager().requestPasswordReset(email, template, listener);
+
+Reset Password (resetPasswordWithToken)
+
+Resets the user’s password with a new one. Must include the token provided from the password reset email.
+
+4.x
+        Map<String, String> params = new HashMap<>();
+        params.put("reset_password_token", token);
+        params.put("password", password);
+        params.put("password_confirmation", password);
+        AylaUser.resetPasswordWithToken(handler, params);
+
+5.x
+        AylaNetworks.sharedInstance().getLoginManager().resetPassword(password, token, listener);
+
+Start Session (startSession)
+
+When a user signs in, a new Session is created. A Session represents a user’s authenticated login session with the Ayla Cloud Service.
+
+4.x
+        AylaUser.login(new Handler() {
+            @Override
+            public void handleMessage(Message msg) {
+       		if (AylaNetworks.succeeded(msg)) {
+            	    // success
+
+		    // incomplete AylaUser
+                     AylaUser user = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaUser.class);
+                 } else {
+                     // failure
+                 }
+	    }
+	}, userName, password, appId, appSecret);
+
+5.x
+        UsernameAuthProvider authProvider = new UsernameAuthProvider(userName, password);
+        AylaNetworks.sharedInstance().getLoginManager().signIn(authProvider,
+                SESSION_NAME,
+                new Response.Listener<AylaAuthorization>() {
+                    @Override
+                    public void onResponse(AylaAuthorization response) {
+			// success
+
+        			// Cache the authorization
+			CachedAuthProvider.cacheAuthorization(_context, response);
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+
+			// clear the cached authorization
+                    	CachedAuthProvider.clearCachedAuthorization(_context);
+                    }
+                });
+
+Start Session from Cache (startSessionFromCache)
+
+Start a session using the cached authorization, if possible.
+
+4.x
+	See Start Session (Login)
+
+5.x
+        CachedAuthProvider cachedProvider = CachedAuthProvider.getCachedProvider(_context);
+        if (cachedProvider != null) {
+            AylaNetworks.sharedInstance().getLoginManager().signIn(cachedProvider,
+                    SESSION_NAME,
+                    new Response.Listener<AylaAuthorization>() {
+                        @Override
+                        public void onResponse(AylaAuthorization response) {
+			// success
+                        }
+                    },
+                    new ErrorListener() {
+                        @Override
+                        public void onErrorResponse(AylaError error) {
+			// failure
+                        }
+                    });
+        }
+
+Fetch User Profile (getUserProfile)
+
+After starting a session, obtain the user profile.
+
+4.x
+	AylaUser.getInfo(new Handler() {
+            @Override
+            public void handleMessage(Message msg) {
+       		if (AylaNetworks.succeeded(msg)) {
+            	    // success
+
+		    // mostly complete AylaUser
+                     AylaUser user = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaUser.class);
+		    user.password = password;
+                 } else {
+                     // failure
+                 }
+	    }
+	});
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.fetchUserProfile(new Response.Listener<AylaUser>() {
+                                      @Override
+                                      public void onResponse(AylaUser user) {
+					// success
+                                          user.setPassword(password);
+                                      }
+                                  },
+                        new ErrorListener() {
+                            @Override
+                            public void onErrorResponse(AylaError error) {
+				// failure
+                            }
+                        });
+
+Update User Profile (updateUserProfile)
+
+Updates details of the user’s account such as phone number, address, etc.
+
+4.x
+        Map<String, String> params = new HashMap<>();
+        params.put(“firstname”, user.firstname);
+        params.put("lastname", user.lastname);
+        params.put(“phone”, user.phone);
+        params.put(“country”, user.country);
+	AylaUser.updateInfo(new Handler() {
+            @Override
+            public void handleMessage(Message msg) {
+       		if (AylaNetworks.succeeded(msg)) {
+            	    // success
+                 } else {
+                     // failure
+                 }
+	    }
+	}, params, appId, appSecret);
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.updateUserProfile(user, new Response.Listener<AylaUser>() {
+                                      @Override
+                                      public void onResponse(AylaUser user) {
+					// success
+                                      }
+                                  },
+                        new ErrorListener() {
+                            @Override
+                            public void onErrorResponse(AylaError error) {
+				// failure
+                            }
+                        });
+
+Sessions
+
+After starting a session, watch for change, such as session closed or authorization refreshed.
+
+4.x
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.addListener(sessionManagerListener);
+
+End Session (onStopSessionLogoutCompleted)
+
+4.x
+        Map<String, String> params = new HashMap<>();
+        params.put("access_token", AylaUser.user.getauthHeaderValue());
+        _logoutHandler = new LogoutHandler(this);
+        AylaUser.logout(handler, params).execute();
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.shutDown(
+                    new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+                        @Override
+                        public void onResponse(AylaAPIRequest.EmptyResponse response) {
+			// success
+                        }
+                    },
+                    new ErrorListener() {
+                        @Override
+                        public void onErrorResponse(AylaError error) {
+			// failure
+                        }
+                    });
+
+Extend Session (refreshSession)
+
+4.x
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.refreshAuthorization(aylaAuthorization,
+                    new Response.Listener<AylaAuthorization>() {
+                        @Override
+                        public void onResponse(AylaAuthorization response) {
+			   // success
+                            // Cache the authorization
+                            CachedAuthProvider.cacheAuthorization(_context, response);
+                        }
+                    }, new ErrorListener() {
+                        @Override
+                        public void onErrorResponse(AylaError error) {
+			   // failure
+                        }
+                    });
+
+Delete Account (deleteAccount)
+
+Delete the currently logged in user. All data is deleted from the Ayla servers. Properties may still be set in the device. This action also signs out the user.
+
+4.x
+	AylaUser.delete(handler);
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	session.deleteAccount(
+	    new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+		@Override
+		public void onResponse(AylaAPIRequest.EmptyResponse response) {
+		    // success
+		}
+	    },
+	    new ErrorListener() {
+		@Override
+		public void onErrorResponse(AylaError error) {
+		    // failure
+		}
+	    });
+
+*** Device/Wi-Fi Setup:
+
+Setup
+
+There is some setup required to do Device/Wi-Fi setup.
+
+4.x
+	initialized with call to returnHostScanForNewDevices
+
+5.x
+    public void startDeviceSetup() {
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	setup = new AylaSetup(_context, session);
+	setupToken = makeSetupToken();
+    }
+
+    public static String makeSetupToken() {
+        StringBuilder token = new StringBuilder();
+        try {
+            SecureRandom number = SecureRandom.getInstance("SHA1PRNG");
+            for (int i = 0; i < 8; i++) {
+                token.append(number.nextInt(9));
+            }
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        return token.toString();
+    }
+
+    // Set up a filter for the returned results to ignore SSIDs that start with “Ayla-“
+    final Predicate<AylaWifiScanResults.Result> _filterPredicate =
+            new Predicate<AylaWifiScanResults.Result>() {
+                @Override
+                public boolean apply(AylaWifiScanResults.Result result) {
+                    return result.ssid != null && !result.ssid.startsWith(“Ayla-“);
+                }
+            };
+
+Scan New Devices (scanForNewDevices)
+
+Scan for new devices that aren’t currently linked to a Wi-Fi Access Point.
+
+4.x
+        AylaSetup.returnHostScanForNewDevices(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaHostScanResults array
+		AylaHostScanResults[] results = AylaSystemUtils.gson.fromJson(
+			(String)msg.obj, 
+                         AylaHostScanResults[].class);;
+               } else {
+                   // failure
+               }
+           }
+        });
+
+5.x
+        setup.scanForAccessPoints(TIMEOUT_SECONDS, new Predicate<ScanResult>() {
+            @Override
+            public boolean apply(ScanResult scanResult) {
+		// filter on device prefix
+                return scanResult.SSID.startsWith(“Ayla-“);
+            }
+        }, new Response.Listener<ScanResult[]>() {
+            @Override
+            public void onResponse(ScanResult[] response) {
+		// success
+            }
+        }, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+        });
+
+Connect to New Device (connectToNewDevice)
+
+Connect to a new device in order to connect it to a Wi-Fi access point.
+
+4.x
+	// result is a AylaHostScanResults from returnHostScanForNewDevices
+	AylaSetup.newDevice.hostScanResults = result;
+	AylaSetup.lanSsid = result.ssid;
+	AylaSetup.lanSecurityType = result.keyMgmt;
+	AylaSetup.connectToNewDevice(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaModule
+		AylaModule results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaModule.class);
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	// SSID of new device to connect to, from scanForAccessPoints
+        setup.connectToNewDevice(ssid, TIMEOUT_SECONDS,
+                new Response.Listener<AylaSetupDevice>() {
+                    @Override
+                    public void onResponse(AylaSetupDevice device) {
+			// success w/AylaSetupDevice
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+New Device Scan for Wi-Fi (scanConnectedDevice)
+
+Once connected to a new device, start Wi-Fi scan on the new device.
+
+4.x
+	AylaSetup.getNewDeviceScanForAPs(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaModuleScanResults array
+		AylaModuleScanResults[] results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaModuleScanResults[].class);
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	// send a command to the device to scan for access points
+	setup.startDeviceScanForAccessPoints(
+                new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+                    @Override
+                    public void onResponse(AylaAPIRequest.EmptyResponse response) {
+			// success, now fetchDeviceAccessPoints
+                    }
+                }, new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+	// after successful startDeviceScanForAccessPoints
+	setup.fetchDeviceAccessPoints(_filterPredicate,
+                new Response.Listener<AylaWifiScanResults>() {
+                    @Override
+                    public void onResponse(AylaWifiScanResults response) {
+			// success with results
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+Connect New Device to Service (connectDeviceToService)
+
+Once the user has selected a Wi-Fi access point for the new device to connect to
+
+4.x
+	// AylaModuleScanResults scanResults
+	AylaSetup.lanSsid = scanResults.ssid;
+	AylaSetup.lanSecurityType = scanResults.security;
+	AylaSetup.lanPassword = password;
+	AylaSetup.connectNewDeviceToService(handler, null);
+	AylaSetup.connectNewDeviceToService(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success, now confirmNewDeviceToServiceConnection
+               } else {
+		// failure                   
+               }
+           }
+	}, null);
+
+	// after successful connectNewDeviceToService
+	AylaSetup.confirmNewDeviceToServiceConnection(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaDevice
+		AylaDevice device = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaDevice.class);
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	// AylaWifiScanResults.Result result
+	setup.connectDeviceToService(result.ssid, password, setupToken,
+                null, null, TIMEOUT_SECONDS,
+                new Response.Listener<AylaWifiStatus>() {
+                    @Override
+                    public void onResponse(AylaWifiStatus wifiStatus) {
+			// success, now reconnectToOriginalNetwork
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+	// after successful connectDeviceToService
+	setup.reconnectToOriginalNetwork(TIMEOUT_SECONDS, new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+            @Override
+            public void onResponse(AylaAPIRequest.EmptyResponse response) {
+		// success, now confirmDeviceConnected
+            }
+        }, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+        });
+
+	// after successful reconnectToOriginalNetwork
+	setup.confirmDeviceConnected(TIMEOUT_SECONDS, device.getDsn(), _setupToken,
+                new Response.Listener<AylaSetupDevice>() {
+                    @Override
+                    public void onResponse(AylaSetupDevice response) {
+			// success, AylaSetupDevice is now connected to the service
+                    }
+                }, new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+ 
+*** Registration:
+
+Once a device has been configured to join the network, it needs to be associated with the user’s account. This process is called “registration”.
+
+Get Registration Candidate (fetchCandidate)
+For registration flows that require a registration candidate (Same LAN, Button-Push) Ayla provides a method to fetch the candidate from the Cloud Service.
+
+4.x
+	AylaDevice device = new AylaDevice();
+	device.registrationType = AylaNetworks.AML_REGISTRATION_TYPE_BUTTON_PUSH;
+	// now register new device
+
+5.x
+	// if we have an AylaSetupDevice from Wi-Fi setup
+	AylaRegistrationCandidate candidate = new AylaRegistrationCandidate();
+	candidate.setDsn(device.getDsn());
+ 	candidate.setRegistrationType(AylaDevice.RegistrationType.ButtonPush);
+
+	// to fetch a device candidate
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	AylaRegistration registration = session.getDeviceManager().getAylaRegistration();
+	registration.fetchCandidate(null, AylaDevice.RegistrationType.ButtonPush,
+                new Response.Listener<AylaRegistrationCandidate>() {
+                    @Override
+                    public void onResponse(AylaRegistrationCandidate candidate) {
+			// success, now register new device
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+Register New Device (registerNewDevice)
+Once a candidate is fetched, if required, or the user has provided other registration information to the mobile application, the application may call registerDevice to register the device with the user’s account.
+4.x
+	// device can be from Wi-Fi setup or registration candidate
+	device.registerNewDevice(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaDevice
+		AylaDevice device = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaDevice.class);
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	AylaRegistration registration = session.getDeviceManager().getAylaRegistration();
+	registration.registerCandidate(candidate,
+                new Response.Listener<AylaDevice>() {
+                    @Override
+                    public void onResponse(AylaDevice response) {
+			// success with AylaDevice
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+Unregister Device (unregisterDevice)
+
+4.x
+	device.unregisterDevice(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	device.unregister(
+                    new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+                        @Override
+                        public void onResponse(AylaAPIRequest.EmptyResponse response) {
+			// success
+                        }
+                    },
+                    new ErrorListener() {
+                        @Override
+                        public void onErrorResponse(AylaError error) {
+			// failure
+                        }
+                    });
+
+*** Session Manager:
+
+Clear Cache (clearCache)
+
+4.x 
+	AylaCache.clearAll();
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	AylaCache cache = session.getCache();
+	if (cache != null) {
+	    cache.clearAll();
+	}
+
+*** Devices:
+
+Device Manager Listener
+After starting a session, the device manager will automatically fetch devices and properties. A device manager
+listener will notify the app of important changes.
+
+4.x
+
+5.x
+	AylaSessionManager session = AylaNetworks.sharedInstance().getSessionManager(SESSION_NAME);
+	AylaDeviceManager deviceManager = session.getDeviceManager();
+	deviceManager.addListener(deviceManagerListener);
+
+Fetch Devices
+Fetch the list of devices from the server.
+
+4.x
+	AylaDevice.getDevices(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaDevice array
+		AylaDevice[] results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaDevice[].class);
+               } else {
+		// failure                   
+               }
+           }
+	});
+
+5.x
+	// The device manager will automatically fetch devices and properties. To force a fetch, call fetchDevices
+	deviceManager.fetchDevices();
+
+	// deviceManagerInitComplete is called when the device manager has completed initialization
+	@Override
+	public void deviceManagerInitComplete(Map<String, AylaError> deviceFailures) {
+	    // get the devices
+	    List<AylaDevice> results = deviceManager.getDevices();
+	}
+
+	// deviceListChanged is called whenever the list of devices has changed.
+	@Override
+	public void deviceListChanged(ListChange change) {
+	    // get the devices
+	    List<AylaDevice> results = deviceManager.getDevices();
+	}
+
+Device Listener
+After obtaining the initial device list or new devices, add a device listener to notify the app of important changes to the device.
+
+4.x
+
+5.x
+	device.addListener(deviceListener);
+
+Fetch Properties
+Fetch the managed properties for a device from the server.
+
+4.x
+	device.getProperties(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaProperty array
+		AylaProperty[] results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaProperty[].class);
+               } else {
+		// failure                   
+               }
+           }
+	}, propertyNames);
+
+5.x
+	// The device manager will automatically fetch devices and properties. To force a fetch, call fetchProperties
+        device.fetchProperties(propertyNames,
+                new Response.Listener<AylaProperty[]>() {
+                    @Override
+                    public void onResponse(AylaProperty[] response) {
+                        // Properties have already been updated and notifications have been sent
+                        // out in the fetchProperties method.
+                    }
+                },
+                new ErrorListener() {
+                    @Override
+                    public void onErrorResponse(AylaError error) {
+			// failure
+                    }
+                });
+
+	// deviceChanged is called when the status of a device changes, including property changes.
+	@Override
+	public void deviceChanged(AylaDevice device, Change change) {
+	    List<AylaProperty> results = device.getProperties();
+	}
+
+Fetch Device Datum
+For data that needs to be stored, but is not an AylaProperty, AylaDatum provides a way to store key / value pairs associated with the user account or specific devices.
+
+4.x
+	device.getDatumWithKey(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaDatum
+		AylaDatum results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaDatum.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, key);
+
+5.x
+	device.fetchAylaDatum(key, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Create Device Datum
+
+4.x
+	AylaDatum datum = new AylaDatum();
+	datum.key = key;
+	datum.value = Base64.encodeToString(data, Base64.DEFAULT);
+	device.createDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	String value = Base64.encodeToString(data, Base64.DEFAULT);
+	device.createDatum(key, value, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Update Device Datum
+
+4.x
+	AylaDatum datum = new AylaDatum();
+	datum.key = key;
+	datum.value = Base64.encodeToString(data, Base64.DEFAULT);
+	device.updateDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	String value = Base64.encodeToString(data, Base64.DEFAULT);
+	device.updateDatum(key, value, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Delete Device Datum
+
+4.x
+	device.deleteDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	device.deleteDatum(key, new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+            @Override
+            public void onResponse(AylaAPIRequest.EmptyResponse response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+*** Lan Mode:
+
+Lan Mode Active
+
+4.x
+	device.isLanModeActive();
+
+5.x
+	device.isLanModeActive();
+
+Lan Mode Enable
+
+4.x
+	device.lanModeEnable();
+
+5.x
+	device.setLanModePermitted(true);
+
+Lan Mode Disable
+
+4.x
+	device.lanModeDisable();
+
+5.x
+	device.setLanModePermitted(false);
+
+Lan Mode Change
+
+4.x
+	AylaLanMode.enable(notifyLanModeHandler, reachabilityHandler);
+
+   final Handler notifyLanModeHandler = new Handler() {
+	public void handleMessage(Message msg) {
+	    // called whenever device enters or leaves LAN mode
+	}
+    };
+
+5.x
+	// deviceLanStateChanged is called whenever the device enters or leaves LAN mode
+	@Override
+	public void deviceLanStateChanged(AylaDevice device, boolean lanModeEnabled) {
+	}
+
+*** Contacts/Account:
+
+Fetch Contacts
+
+4.x
+	AylaContact.get(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaContact array
+		AylaContact[] results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaContact[].class);
+               } else {
+		// failure                   
+               }
+           }
+	}, null);
+
+5.x
+	session.fetchContacts(new Response.Listener<AylaContact[]>() {
+            @Override
+            public void onResponse(AylaContact[] response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Create Contact (createOwnerContact)
+
+4.x
+	AylaContact contact = new AylaContact();
+	// fill out fields from AylaUser
+	contact.create(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaContact results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaContact.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, null);
+
+5.x
+	AylaContact contact = new AylaContact();
+	// fill out fields from AylaUser
+	session.createContact(contact, new Response.Listener<AylaContact>() {
+            @Override
+            public void onResponse(AylaContact contact) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Fetch Account Datum
+
+4.x
+	user.getDatumWithKey(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success with AylaDatum
+		AylaDatum results = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaDatum.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, key);
+
+5.x
+	session.fetchAylaDatum(key, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Create Account Datum
+
+4.x
+	AylaDatum datum = new AylaDatum();
+	datum.key = key;
+	datum.value = Base64.encodeToString(data, Base64.DEFAULT);
+	user.createDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	String value = Base64.encodeToString(data, Base64.DEFAULT);
+	session.createDatum(key, value, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Update Account Datum
+
+4.x
+	AylaDatum datum = new AylaDatum();
+	datum.key = key;
+	datum.value = Base64.encodeToString(data, Base64.DEFAULT);
+	user.updateDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	String value = Base64.encodeToString(data, Base64.DEFAULT);
+	session.updateDatum(key, value, new Response.Listener<AylaDatum>() {
+            @Override
+            public void onResponse(AylaDatum response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+Delete Account Datum
+
+4.x
+	user.deleteDatum(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, datum);
+
+5.x
+	session.deleteDatum(key, new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+            @Override
+            public void onResponse(AylaAPIRequest.EmptyResponse response) {
+                // success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+                // failure
+            }
+	});
+
+*** Schedules:
+Properties may be updated via a schedule that can be configured by the mobile application. A schedule is associated with an AylaDevice and can be configured to run one or more “schedule actions”.
+
+Fetch Schedules (fetchSchedules)
+Fetches an array of existing AylaSchedules from the cloud for an AylaDevice
+
+4.x
+	device.getAllSchedules(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, params);
+
+5.x
+	device.fetchSchedules(new Response.Listener<AylaSchedule[]>() {
+            @Override
+            public void onResponse(AylaSchedule[] response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+Create Schedule (createSchedule)
+Creates an AylaSchedule in the cloud
+
+4.x
+	// schedules are pre-created in the OEM template
+
+5.x
+	device.createSchedule(schedule, new Response.Listener<AylaSchedule>() {
+            @Override
+            public void onResponse(AylaSchedule response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+Update Schedule (updateSchedule)
+Updates an AylaSchedule in the cloud
+
+4.x
+	device.updateSchedule(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, schedule);
+
+5.x
+	device.updateSchedule(schedule, new Response.Listener<AylaSchedule>() {
+            @Override
+            public void onResponse(AylaSchedule response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+Disable Schedule (disableSchedule)
+Disables an existing AylaSchedule
+
+4.x
+	// set active to false and updateSchedule
+
+5.x
+	device.disableSchedule(schedule, new Response.Listener<AylaSchedule>() {
+            @Override
+            public void onResponse(AylaSchedule response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+Enable Schedule (enableSchedule)
+Enables an existing AylaSchedule
+
+4.x
+	// set active to true and updateSchedule
+
+5.x
+	device.enableSchedule(schedule, new Response.Listener<AylaSchedule>() {
+            @Override
+            public void onResponse(AylaSchedule response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+
+Delete Schedule (deleteSchedule)
+Deletes an existing AylaSchedule from the cloud.
+
+4.x
+	// schedules are pre-created in the OEM template and can’t be deleted.
+	// clearSchedule will delete the Schedule Actions and active to false.
+	device.clearSchedule(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, schedule);
+
+5.x
+	device.deleteSchedule(schedule, new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+            @Override
+            public void onResponse(AylaAPIRequest.EmptyResponse response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure                
+            }
+	});
+
+*** Device Sharing:
+AylaDevices may be shared with other users with separate accounts.
+
+Devices that are shared with the current user account will appear in the list of devices from AylaDeviceManager, and can be treated like other devices in the system. These AylaDevice objects will be identifiable as “shared” devices by the presence of an AylaGrant object returned from AylaDevice’s getGrant.
+
+Fetch Shares (fetchShares)
+Fetch the AylaShare objects for shared, owned resources by this user.
+
+4.x
+	user.getShares(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaShare[] shares = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaShare[].class);
+               } else {
+		// failure                   
+               }
+           }
+	}, params);
+
+5.x
+	session.fetchOwnedShares(new Response.Listener<AylaShare[]>() {
+            @Override
+            public void onResponse(AylaShare[] response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Fetches received AylaShare objects from the cloud.
+
+4.x
+	user.getAllReceivedShares(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaShare[] shares = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaShare[].class);
+               } else {
+		// failure                   
+               }
+           }
+	}, params);
+
+5.x
+	session.fetchReceivedShares(new Response.Listener<AylaShare[]>() {
+            @Override
+            public void onResponse(AylaShare[] response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Fetch Share (fetchShare)
+Fetch AylaShare object from the cloud for the specified Id.
+
+4.x
+	user.getShare(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaShare share = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaShare.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, shareId);
+
+5.x
+	session.fetchShare(shareId, new Response.Listener<AylaShare>() {
+            @Override
+            public void onResponse(AylaShare response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Create Share
+Create shares owned by this user. To share a device with another user, an AylaShare object is created and initialized with the email address of the user to share with, the serial number (DSN) of the device to share, start / end dates when the share should be valid, and the role (read-only, read / write) the share should be granted with.
+
+4.x
+	user.createShare(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaShare share = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaShare.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, share);
+
+5.x
+	session.createShare(share, templateId, new Response.Listener<AylaShare>() {
+            @Override
+            public void onResponse(AylaShare response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+	
+Update Share (updateShare)
+Update a share owned by this user.
+
+4.x
+	user.updateShare(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+		AylaShare share = AylaSystemUtils.gson.fromJson((String)msg.obj, AylaShare.class);
+               } else {
+		// failure                   
+               }
+           }
+	}, share);
+
+5.x
+	session.updateShare(share, templateId, new Response.Listener<AylaShare>() {
+            @Override
+            public void onResponse(AylaShare response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+
+Delete Share (deleteShare)
+Deletes a share owned or received by this user.
+
+4.x
+	user.deleteShare(new Handler() {
+           @Override
+            public void handleMessage(Message msg) {
+               if (AylaNetworks.succeeded(msg)) {
+		// success
+               } else {
+		// failure                   
+               }
+           }
+	}, share);
+
+5.x
+	session.deleteShare(shareId, new Response.Listener<AylaAPIRequest.EmptyResponse>() {
+            @Override
+            public void onResponse(AylaAPIRequest.EmptyResponse response) {
+		// success
+            }
+	}, new ErrorListener() {
+            @Override
+            public void onErrorResponse(AylaError error) {
+		// failure
+            }
+	});
+

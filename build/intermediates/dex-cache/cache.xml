@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<items version="2" >
+
+    <item
+        is-multidex="true"
+        jar="/home/local/MPROGA1/shivnandan.sardhalia/Documents/Aura/Android_Aura_Public-master/libraries/Android_AylaSDK_Public/websocketLibrary/websocketLib/build/intermediates/bundles/default/classes.jar"
+        jumboMode="false"
+        optimize="true"
+        revision="25.0.2"
+        sha1="c2722f292ec43603f0fb1f05aeeba1f87d4c3c1c">
+        <dex dex="/home/local/MPROGA1/shivnandan.sardhalia/Documents/Aura/Android_Aura_Public-master/app/build/intermediates/transforms/dex/aGoogle/debug/folders/1000/4/classes_8d00e26dff7d8558bf4d318e425cc7ca352534c9/classes.dex" />
+    </item>
+    <item
+        is-multidex="true"
+        jar="/home/local/MPROGA1/shivnandan.sardhalia/Documents/Aura/Android_Aura_Public-master/libraries/Android_AylaSDK_Public/library/build/intermediates/bundles/default/classes.jar"
+        jumboMode="false"
+        optimize="true"
+        revision="25.0.2"
+        sha1="5fc902a03f4c6dc463bf5d46deee861a59d5f053">
+        <dex dex="/home/local/MPROGA1/shivnandan.sardhalia/Documents/Aura/Android_Aura_Public-master/app/build/intermediates/transforms/dex/aGoogle/debug/folders/1000/4/classes_010a0e3164fe2f1f31a4e798745acb02885a9273/classes.dex" />
+    </item>
+    <item
+        is-multidex="true"
+        jar="/home/local/MPROGA1/shivnandan.sardhalia/.gradle/caches/modules-2/files-2.1/com.tencent.mm.opensdk/wechat-sdk-android-without-mta/1.3.4/a7bebff567a2b8801f4f8c79438bae1e95d052ab/wechat-sdk-android-without-mta-1.3.4.jar"
+        jumboMode="false"
+        optimize="true"
+        revision="25.0.2"
+        sha1="a7bebff567a2b8801f4f8c79438bae1e95d052ab">
+        <dex dex="/home/local/MPROGA1/shivnandan.sardhalia/Documents/Aura/Android_Aura_Public-master/app/build/intermediates/transforms/dex/aGoogle/debug/folders/1000/10/wechat-sdk-android-without-mta-1.3.4_db035b1e7ef144ae1a1b607d0a11ac7b59d249b9/classes.dex" />
+    </item>
+
+</items>

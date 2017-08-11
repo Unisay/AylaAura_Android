@@ -1,0 +1,55 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.3.2'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+allprojects {
+    repositories {
+        jcenter()
+    }
+
+    tasks.withType(Javadoc) {
+        if (JavaVersion.current().isJava8Compatible()) {
+            options.addStringOption('Xdoclint:none', '-quiet')
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+/* Task to generate library jar. Use command
+ * 'gradlew jar' to create Android_AylaSDK.jar
+*/
+task jar(type: Jar) {
+    from('library/build/intermediates/bundles/default')
+    archiveName "library/build/outputs/Android_AylaSDK.jar"
+}
+
+jar.dependsOn ":library:clean"
+jar.dependsOn ":library:assembleRelease"
+jar.mustRunAfter ":library:clean"
+
+/* Task to generate library jar. Use command
+ * 'gradlew aar' to create Android_AylaSDK.aar
+*/
+task aar(type: Copy) {
+    from('library/build/outputs/aar/')
+    into("library/build/outputs")
+    include('library-release.aar')
+    rename('library-release.aar', 'Android_AylaSDK.aar')
+}
+
+aar.dependsOn ":library:clean"
+aar.dependsOn ":library:assembleRelease"
+aar.mustRunAfter ":library:clean"

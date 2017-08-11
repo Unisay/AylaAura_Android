@@ -1,0 +1,2 @@
+include ':library', ':websocketLibrary', ':websocketLibs'
+project(':websocketLibrary').projectDir = new File('websocketLibrary/websocketLib')
