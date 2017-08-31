@@ -274,7 +274,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 template.setEmailTemplateId(emailTemplateId);
                 String language = Locale.getDefault().getDisplayLanguage();
                 Log.e("ROHIT", language);
-                if (!language.equalsIgnoreCase("english")) {
+                if (language.equalsIgnoreCase("हिन्दी")) {
                     template.setEmailTemplateId("template_hindi");
                     template.setEmailSubject("आभा में आपका स्वागत है");
                 }
